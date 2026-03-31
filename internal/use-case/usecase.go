@@ -103,9 +103,13 @@ func (a *AppointmentService) UpdateStatus(id string, stat model.Status) error {
 		return err
 	}
 
+	if stat != model.StatusNew || stat != model.Done || stat != model.InProgress {
+		return ErrInvalidStatus
+	}
+
 	// validate transition
 	if !ap.ValidateStatusTransition(stat) {
-		return errors.New("invalid status transition")
+		return ErrInvalidStatusTransition
 	}
 
 	ap.Status = stat
