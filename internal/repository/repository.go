@@ -10,7 +10,7 @@ type AppointmentRepository interface {
 	Create(ap *model.Appointment) error
 	GetById(id string) (*model.Appointment, error)
 	List() ([]*model.Appointment, error)
-	Update(id string, status model.Status) error
+	Update(ap *model.Appointment) error
 }
 
 type InMemoryAppointmentStorage struct {
@@ -54,15 +54,15 @@ func (a *InMemoryAppointmentStorage) List() ([]*model.Appointment, error) {
 	return list, nil
 }
 
-func (a *InMemoryAppointmentStorage) Update(id string, status model.Status) error {
+func (a *InMemoryAppointmentStorage) Update(ap *model.Appointment) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	ap, ok := a.appoints[id]
+	_, ok := a.appoints[ap.ID]
 	if !ok {
 		return ErrAppointmentNotFound
 	}
 
-	ap.Status = status
+	a.appoints[ap.ID] = ap
 	return nil
 }

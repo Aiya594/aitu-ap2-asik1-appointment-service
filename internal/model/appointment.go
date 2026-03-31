@@ -15,9 +15,10 @@ type Appointment struct {
 func (a *Appointment) ValidateStatusTransition(to Status) bool {
 
 	allowed := validTransitions[a.Status]
-	if allowed == to {
-		return true
+	for _, s := range allowed {
+		if s == to {
+			return true
+		}
 	}
-
 	return false
 }

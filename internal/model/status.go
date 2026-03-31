@@ -8,7 +8,7 @@ const (
 	Done       Status = "done"
 )
 
-var validTransitions = map[Status]Status{
-	StatusNew:  InProgress,
-	InProgress: Done,
+var validTransitions = map[Status][]Status{
+	StatusNew:  {InProgress},
+	InProgress: {Done},
 }

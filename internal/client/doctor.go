@@ -22,17 +22,17 @@ func NewDoctorClient(baseUrl string) *DoctorClient {
 	}
 }
 
-func (c *DoctorClient) ExistsDoctor(id string) (bool, error) {
+func (c *DoctorClient) ExistsDoctor(id string) error {
 	resp, err := c.client.Get(c.BaseUrl + "/doctors/" + id)
 
 	if err != nil {
-		return false, err
+		return err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusOK {
-		return true, nil
+		return nil
 	}
 
-	return false, ErrDocNotFound
+	return ErrDocNotFound
 }
