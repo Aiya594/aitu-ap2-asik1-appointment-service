@@ -22,7 +22,7 @@ import (
 //  Transitioning a status from done back to new is not allowed.
 
 type AppointmentUseCase interface {
-	CreateAppointment(title, description, doctorID string) error
+	CreateAppointment(title, description, doctorID string) (string, error)
 	UpdateStatus(id string, stat model.Status) error
 	GetByID(id string) (*model.Appointment, error)
 	GetAll() ([]*model.Appointment, error)
@@ -42,7 +42,7 @@ func NewAppointmentUseCase(repo repository.AppointmentRepository,
 	}
 }
 
-func (a *AppointmentService) CreateAppointment(title, description, doctorID string) error {
+func (a *AppointmentService) CreateAppointment(title, description, doctorID string) (string, error) {
 	title = strings.TrimSpace(strings.ToLower(title))
 	description = strings.TrimSpace(strings.ToLower(description))
 	doctorID = strings.TrimSpace(doctorID)
@@ -53,7 +53,7 @@ func (a *AppointmentService) CreateAppointment(title, description, doctorID stri
 			"title", title,
 			"description", description,
 			"doctor_id", doctorID)
-		return fmt.Errorf("title, description and doctor_id are required:%w", ErrEmptyFields)
+		return "", fmt.Errorf("title, description and doctor_id are required:%w", ErrEmptyFields)
 	}
 
 	err := a.client.ExistsDoctor(doctorID)
@@ -62,9 +62,9 @@ func (a *AppointmentService) CreateAppointment(title, description, doctorID stri
 			"error", err,
 			"doctor_id", doctorID)
 		if errors.Is(err, client.ErrDocNotFound) {
-			return fmt.Errorf("doctor does not exist:%w", err)
+			return "", fmt.Errorf("doctor does not exist:%w", err)
 		}
-		return fmt.Errorf("failed to check the doctor:%w", err)
+		return "", fmt.Errorf("failed to check the doctor:%w", err)
 	}
 
 	id := uuid.New().String()
@@ -89,11 +89,11 @@ func (a *AppointmentService) CreateAppointment(title, description, doctorID stri
 			"title", title,
 			"description", description,
 			"doctor_id", doctorID)
-		return fmt.Errorf("failed to create an appointment:%w", err)
+		return id, fmt.Errorf("failed to create an appointment:%w", err)
 	}
 
 	a.logger.Info("appointment created", "id", id)
-	return nil
+	return id, nil
 
 }
 

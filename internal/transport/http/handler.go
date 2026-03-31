@@ -42,7 +42,7 @@ func (h *Handler) CreateAppointment(c *gin.Context) {
 		return
 	}
 
-	err := h.us.CreateAppointment(req.Title, req.Description, req.DoctorID)
+	id, err := h.us.CreateAppointment(req.Title, req.Description, req.DoctorID)
 	if err != nil {
 		c.JSON(parseError(err), gin.H{
 			"error": err.Error(),
@@ -52,6 +52,7 @@ func (h *Handler) CreateAppointment(c *gin.Context) {
 
 	c.JSON(http.StatusCreated, gin.H{
 		"message": "appointment created",
+		"id":      id,
 	})
 }
 
