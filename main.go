@@ -17,5 +17,8 @@ func main() {
 	config := cfg.LoadCfg()
 
 	app := app.NewApp(config)
-	app.Run(config.Port)
+	err = app.Run(config.Port)
+	if err != nil {
+		log.Fatal(err)
+	}
 }

@@ -60,8 +60,10 @@ func (a *AppointmentService) CreateAppointment(ctx context.Context, title, descr
 	if err != nil {
 		a.logger.Error("failed check the doctor",
 			"error", err,
-			"doctor_id", doctorID)
-		return nil, fmt.Errorf("failed to check the doctor:%w", err)
+			"doctor_id", doctorID,
+		)
+
+		return nil, err
 	}
 
 	id := uuid.New().String()

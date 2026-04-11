@@ -1,38 +1,67 @@
 package app
 
 import (
+	"log"
 	"log/slog"
+	"net"
 	"os"
 
 	"github.com/Aiya594/appointment-services/internal/client"
 	cfg "github.com/Aiya594/appointment-services/internal/config"
 	"github.com/Aiya594/appointment-services/internal/repository"
-	httpappoi "github.com/Aiya594/appointment-services/internal/transport/http"
+	grpcAppoi "github.com/Aiya594/appointment-services/internal/transport/grpc"
 	usecase "github.com/Aiya594/appointment-services/internal/use-case"
-	"github.com/gin-gonic/gin"
+	"github.com/Aiya594/appointment-services/proto"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 type App struct {
-	router *gin.Engine
+	grpcSrev *grpc.Server
+	logger   *slog.Logger
 }
 
 func NewApp(cfg *cfg.Config) *App {
 	repo := repository.NewAppointmentRepo()
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	docClient := client.NewDoctorClient(cfg.DoctorClient)
 
-	usecase := usecase.NewAppointmentUseCase(repo, logger, docClient)
+	conn, err := grpc.Dial(
+		cfg.DoctorClient,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	h := httpappoi.NewAppointmentHandler(usecase)
+	client := client.NewDoctorGrpcClient(conn)
+	uc := usecase.NewAppointmentUseCase(repo, logger, client)
+	handler := grpcAppoi.NewAppointmentServer(logger, uc)
 
-	r := gin.Default()
+	grpcServer := grpc.NewServer()
 
-	httpappoi.RegisterRoutes(r, h)
+	proto.RegisterAppointmentServiceServer(grpcServer, handler)
 
-	return &App{router: r}
+	return &App{
+		grpcSrev: grpcServer,
+		logger:   logger,
+	}
+
 }
 
-func (a *App) Run(port string) {
-	a.router.Run(":" + port)
+func (a *App) Run(port string) error {
+	lis, err := net.Listen("tcp", ":"+port)
+	if err != nil {
+		return err
+	}
+
+	err = a.grpcSrev.Serve(lis)
+	if err != nil {
+		return err
+	}
+
+	a.logger.Info("gRPC server started", "port", port)
+
+	return nil
+
 }
