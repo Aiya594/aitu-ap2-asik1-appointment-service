@@ -1,7 +1,7 @@
 package usecase
 
 import (
-	"errors"
+	"context"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -22,8 +22,8 @@ import (
 //  Transitioning a status from done back to new is not allowed.
 
 type AppointmentUseCase interface {
-	CreateAppointment(title, description, doctorID string) (string, error)
-	UpdateStatus(id string, stat model.Status) error
+	CreateAppointment(ctx context.Context, title, description, doctorID string) (*model.Appointment, error)
+	UpdateStatus(id string, stat model.Status) (*model.Appointment, error)
 	GetByID(id string) (*model.Appointment, error)
 	GetAll() ([]*model.Appointment, error)
 }
@@ -31,18 +31,18 @@ type AppointmentUseCase interface {
 type AppointmentService struct {
 	repo   repository.AppointmentRepository
 	logger *slog.Logger
-	client *client.DoctorClient
+	client client.DoctorGRPC
 }
 
 func NewAppointmentUseCase(repo repository.AppointmentRepository,
 	logger *slog.Logger,
-	client *client.DoctorClient) AppointmentUseCase {
+	client client.DoctorGRPC) AppointmentUseCase {
 	return &AppointmentService{
 		repo: repo, logger: logger, client: client,
 	}
 }
 
-func (a *AppointmentService) CreateAppointment(title, description, doctorID string) (string, error) {
+func (a *AppointmentService) CreateAppointment(ctx context.Context, title, description, doctorID string) (*model.Appointment, error) {
 	title = strings.TrimSpace(strings.ToLower(title))
 	description = strings.TrimSpace(strings.ToLower(description))
 	doctorID = strings.TrimSpace(doctorID)
@@ -53,18 +53,15 @@ func (a *AppointmentService) CreateAppointment(title, description, doctorID stri
 			"title", title,
 			"description", description,
 			"doctor_id", doctorID)
-		return "", fmt.Errorf("title, description and doctor_id are required:%w", ErrEmptyFields)
+		return nil, fmt.Errorf("title, description and doctor_id are required:%w", ErrEmptyFields)
 	}
 
-	err := a.client.ExistsDoctor(doctorID)
+	doc, err := a.client.GetDoctor(ctx, doctorID)
 	if err != nil {
 		a.logger.Error("failed check the doctor",
 			"error", err,
 			"doctor_id", doctorID)
-		if errors.Is(err, client.ErrDocNotFound) {
-			return "", fmt.Errorf("doctor does not exist:%w", err)
-		}
-		return "", fmt.Errorf("failed to check the doctor:%w", err)
+		return nil, fmt.Errorf("failed to check the doctor:%w", err)
 	}
 
 	id := uuid.New().String()
@@ -76,7 +73,7 @@ func (a *AppointmentService) CreateAppointment(title, description, doctorID stri
 		ID:          id,
 		Title:       title,
 		Description: description,
-		DoctorID:    doctorID,
+		DoctorID:    doc.ID,
 		Status:      status,
 		CreatedAt:   created,
 		UpdatedAt:   updated,
@@ -89,33 +86,37 @@ func (a *AppointmentService) CreateAppointment(title, description, doctorID stri
 			"title", title,
 			"description", description,
 			"doctor_id", doctorID)
-		return id, fmt.Errorf("failed to create an appointment:%w", err)
+		return nil, fmt.Errorf("failed to create an appointment:%w", err)
 	}
 
 	a.logger.Info("appointment created", "id", id)
-	return id, nil
+	return ap, nil
 
 }
 
-func (a *AppointmentService) UpdateStatus(id string, stat model.Status) error {
+func (a *AppointmentService) UpdateStatus(id string, stat model.Status) (*model.Appointment, error) {
 	ap, err := a.repo.GetById(id)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if stat != model.StatusNew || stat != model.Done || stat != model.InProgress {
-		return ErrInvalidStatus
+		return nil, ErrInvalidStatus
 	}
 
 	// validate transition
 	if !ap.ValidateStatusTransition(stat) {
-		return ErrInvalidStatusTransition
+		return nil, ErrInvalidStatusTransition
 	}
 
 	ap.Status = stat
 	ap.UpdatedAt = time.Now()
+	err = a.repo.Update(ap)
+	if err != nil {
+		return nil, err
+	}
 
-	return a.repo.Update(ap)
+	return ap, nil
 }
 
 func (a *AppointmentService) GetByID(id string) (*model.Appointment, error) {
