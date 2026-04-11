@@ -97,7 +97,7 @@ func (a *AppointmentService) CreateAppointment(ctx context.Context, title, descr
 func (a *AppointmentService) UpdateStatus(id string, stat model.Status) (*model.Appointment, error) {
 	ap, err := a.repo.GetById(id)
 	if err != nil {
-		return nil, err
+		return nil, ErrAppointmentNotFound
 	}
 
 	if stat != model.StatusNew || stat != model.Done || stat != model.InProgress {
@@ -120,7 +120,11 @@ func (a *AppointmentService) UpdateStatus(id string, stat model.Status) (*model.
 }
 
 func (a *AppointmentService) GetByID(id string) (*model.Appointment, error) {
-	return a.repo.GetById(id)
+	app, err := a.repo.GetById(id)
+	if err != nil {
+		return nil, ErrAppointmentNotFound
+	}
+	return app, nil
 }
 
 func (a *AppointmentService) GetAll() ([]*model.Appointment, error) {
