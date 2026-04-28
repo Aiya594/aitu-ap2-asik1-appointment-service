@@ -22,7 +22,12 @@ type App struct {
 }
 
 func NewApp(cfg *cfg.Config) *App {
-	repo := repository.NewAppointmentRepo()
+
+	db, err := cfg.Connect()
+	if err != nil {
+		log.Fatal(err)
+	}
+	repo := repository.NewAppointmentRepo(db)
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 

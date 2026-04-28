@@ -1,7 +1,8 @@
 package repository
 
 import (
-	"sync"
+	"database/sql"
+	"errors"
 
 	"github.com/Aiya594/appointment-services/internal/model"
 )
@@ -13,56 +14,133 @@ type AppointmentRepository interface {
 	Update(ap *model.Appointment) error
 }
 
-type InMemoryAppointmentStorage struct {
-	mu       sync.RWMutex
-	appoints map[string]*model.Appointment
+type PostgresAppointmentRepository struct {
+	db *sql.DB
 }
 
-func NewAppointmentRepo() AppointmentRepository {
-	return &InMemoryAppointmentStorage{
-		appoints: make(map[string]*model.Appointment),
+func NewAppointmentRepo(db *sql.DB) AppointmentRepository {
+	return &PostgresAppointmentRepository{db: db}
+}
+
+func (r *PostgresAppointmentRepository) Create(ap *model.Appointment) error {
+	query := `
+		INSERT INTO appointments (id, title, description, doctor_id, status, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+	`
+
+	_, err := r.db.Exec(
+		query,
+		ap.ID,
+		ap.Title,
+		ap.Description,
+		ap.DoctorID,
+		ap.Status,
+		ap.CreatedAt,
+		ap.UpdatedAt,
+	)
+
+	if err != nil {
+		return err
 	}
-}
 
-func (a *InMemoryAppointmentStorage) Create(ap *model.Appointment) error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
-	a.appoints[ap.ID] = ap
 	return nil
 }
 
-func (a *InMemoryAppointmentStorage) GetById(id string) (*model.Appointment, error) {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
+func (r *PostgresAppointmentRepository) GetById(id string) (*model.Appointment, error) {
+	query := `
+		SELECT id, title, description, doctor_id, status, created_at, updated_at
+		FROM appointments
+		WHERE id = $1
+	`
 
-	ap, ok := a.appoints[id]
-	if !ok {
-		return nil, ErrAppointmentNotFound
+	var ap model.Appointment
+
+	err := r.db.QueryRow(query, id).Scan(
+		&ap.ID,
+		&ap.Title,
+		&ap.Description,
+		&ap.DoctorID,
+		&ap.Status,
+		&ap.CreatedAt,
+		&ap.UpdatedAt,
+	)
+
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrAppointmentNotFound
+		}
+		return nil, err
 	}
-	return ap, nil
+
+	return &ap, nil
 }
 
-func (a *InMemoryAppointmentStorage) List() ([]*model.Appointment, error) {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
+func (r *PostgresAppointmentRepository) List() ([]*model.Appointment, error) {
+	query := `
+		SELECT id, title, description, doctor_id, status, created_at, updated_at
+		FROM appointments
+	`
 
-	list := make([]*model.Appointment, 0, len(a.appoints))
-	for _, ap := range a.appoints {
-		list = append(list, ap)
+	rows, err := r.db.Query(query)
+	if err != nil {
+		return nil, err
 	}
-	return list, nil
+	defer rows.Close()
+
+	var result []*model.Appointment
+
+	for rows.Next() {
+		var ap model.Appointment
+
+		err := rows.Scan(
+			&ap.ID,
+			&ap.Title,
+			&ap.Description,
+			&ap.DoctorID,
+			&ap.Status,
+			&ap.CreatedAt,
+			&ap.UpdatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		result = append(result, &ap)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return result, nil
 }
 
-func (a *InMemoryAppointmentStorage) Update(ap *model.Appointment) error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
+func (r *PostgresAppointmentRepository) Update(ap *model.Appointment) error {
+	query := `
+		UPDATE appointments
+		SET status = $5,
+		    updated_at = $6
+		WHERE id = $1
+	`
 
-	_, ok := a.appoints[ap.ID]
-	if !ok {
+	res, err := r.db.Exec(
+		query,
+		ap.Status,
+		ap.UpdatedAt,
+		ap.ID,
+	)
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if rowsAffected == 0 {
 		return ErrAppointmentNotFound
 	}
 
-	a.appoints[ap.ID] = ap
 	return nil
 }
