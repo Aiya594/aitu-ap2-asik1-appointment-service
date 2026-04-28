@@ -12,10 +12,15 @@ type Config struct {
 	Port         string
 	DoctorClient string
 	ConnStrDB    string
+	NatsURL      string
 }
 
 func LoadCfg() *Config {
-	return &Config{Port: os.Getenv("PORT"), DoctorClient: os.Getenv("DOCTOR_SCV_URL"), ConnStrDB: os.Getenv("DATABASE_URL")}
+	return &Config{Port: os.Getenv("PORT"),
+		DoctorClient: os.Getenv("DOCTOR_SCV_URL"),
+		ConnStrDB:    os.Getenv("DATABASE_URL"),
+		NatsURL:      os.Getenv("NATS_URL"),
+	}
 }
 
 func (c *Config) Connect() (*sql.DB, error) {

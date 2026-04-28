@@ -2,12 +2,14 @@ package usecase
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/Aiya594/appointment-services/internal/client"
+	natspub "github.com/Aiya594/appointment-services/internal/event"
 	"github.com/Aiya594/appointment-services/internal/model"
 	"github.com/Aiya594/appointment-services/internal/repository"
 	"github.com/google/uuid"
@@ -29,16 +31,17 @@ type AppointmentUseCase interface {
 }
 
 type AppointmentService struct {
-	repo   repository.AppointmentRepository
-	logger *slog.Logger
-	client client.DoctorGRPC
+	repo      repository.AppointmentRepository
+	logger    *slog.Logger
+	client    client.DoctorGRPC
+	publisher natspub.EventPublisher
 }
 
 func NewAppointmentUseCase(repo repository.AppointmentRepository,
 	logger *slog.Logger,
-	client client.DoctorGRPC) AppointmentUseCase {
+	client client.DoctorGRPC, pub natspub.EventPublisher) AppointmentUseCase {
 	return &AppointmentService{
-		repo: repo, logger: logger, client: client,
+		repo: repo, logger: logger, client: client, publisher: pub,
 	}
 }
 
@@ -90,8 +93,41 @@ func (a *AppointmentService) CreateAppointment(ctx context.Context, title, descr
 			"doctor_id", doctorID)
 		return nil, fmt.Errorf("failed to create an appointment:%w", err)
 	}
-
 	a.logger.Info("appointment created", "id", id)
+
+	eventType := model.AppointmentCreatedEventName
+	event := model.AppointmentCreated{
+		Event_type:  eventType,
+		Occurred_at: created,
+		ID:          ap.ID,
+		Title:       ap.Title,
+		Doctor_id:   ap.DoctorID,
+		Status:      string(ap.Status),
+	}
+
+	data, err := json.Marshal(event)
+	if err != nil {
+		a.logger.Error("failed matshal event",
+			"error", err.Error(),
+			"event_type", eventType,
+			"id", id,
+			"title", title,
+			"description", description,
+			"doctor_id", doctorID)
+		return nil, err
+	}
+	err = a.publisher.Publish(eventType, data)
+	if err != nil {
+		a.logger.Error("failed to publish event",
+			"error", err.Error(),
+			"event_type", eventType,
+			"id", id,
+			"title", title,
+			"description", description,
+			"doctor_id", doctorID)
+		return nil, err
+	}
+
 	return ap, nil
 
 }
@@ -102,12 +138,22 @@ func (a *AppointmentService) UpdateStatus(id string, stat model.Status) (*model.
 		return nil, ErrAppointmentNotFound
 	}
 
-	if stat != model.StatusNew || stat != model.Done || stat != model.InProgress {
+	if stat != model.StatusNew && stat != model.Done && stat != model.InProgress {
+		a.logger.Warn("invalid status provided",
+			"appointment_id", id,
+			"status", stat,
+		)
 		return nil, ErrInvalidStatus
 	}
+	oldStat := ap.Status
 
 	// validate transition
 	if !ap.ValidateStatusTransition(stat) {
+		a.logger.Warn("invalid status transition",
+			"appointment_id", id,
+			"from", ap.Status,
+			"to", stat,
+		)
 		return nil, ErrInvalidStatusTransition
 	}
 
@@ -115,6 +161,45 @@ func (a *AppointmentService) UpdateStatus(id string, stat model.Status) (*model.
 	ap.UpdatedAt = time.Now()
 	err = a.repo.Update(ap)
 	if err != nil {
+		a.logger.Error("failed to update appointment",
+			"error", err,
+			"appointment_id", id,
+		)
+		return nil, err
+	}
+	a.logger.Info("status updated successfully",
+		"appointment_id", id,
+		"status", stat,
+	)
+
+	eventType := model.AppointmentStatusUpdatedEventName
+	event := model.AppointmentStatusUpdated{
+		Event_type:  eventType,
+		Occurred_at: ap.UpdatedAt,
+		ID:          ap.ID,
+		Old_status:  string(oldStat),
+		New_status:  string(stat),
+	}
+	data, err := json.Marshal(event)
+	if err != nil {
+		a.logger.Error("failed to marshal event",
+			"error", err,
+			"event_type", eventType,
+			"appointment_id", id,
+			"old_status", oldStat,
+			"new_stat", stat,
+		)
+		return nil, err
+	}
+	err = a.publisher.Publish(eventType, data)
+	if err != nil {
+		a.logger.Error("failed to publish event",
+			"error", err,
+			"event_type", eventType,
+			"appointment_id", id,
+			"old_status", oldStat,
+			"new_stat", stat,
+		)
 		return nil, err
 	}
 
