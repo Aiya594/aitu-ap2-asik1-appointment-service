@@ -13,6 +13,7 @@ require (
 
 require (
 	github.com/klauspost/compress v1.18.5 // indirect
+	github.com/lib/pq v1.10.9 // indirect
 	github.com/nats-io/nkeys v0.4.15 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
 	golang.org/x/crypto v0.49.0 // indirect

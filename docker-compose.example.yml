@@ -1,0 +1,56 @@
+version: "3.9"
+
+services:
+  appointment-service:
+    build: ./appointment-service
+    container_name: appointment-service
+    env_file:
+    - ./appointment-service/.env
+    ports:
+      - "50052:50052"
+    depends_on:
+      - nats
+      - doctor-service
+    environment:
+      DATABASE_URL: url
+      DOCTOR_SERVICE_ADDR: doctor-service:50051
+    networks:
+      - app-network
+
+  doctor-service:
+    build: ./doctor-service
+    container_name: doctor-service
+    env_file:
+    - ./doctor-service/.env
+    environment:
+      DATABASE_URL: url
+      NATS_URL: nats://nats:4222
+    ports:
+      - "50051:50051"
+    networks:
+      - app-network
+
+  notification-service:
+    build: ./notification-service
+    container_name: notification-service
+    env_file:
+    - ./notification-service/.env
+    depends_on:
+      - nats
+    environment:
+      NATS_URL: nats://nats:4222
+    networks:
+      - app-network
+
+  nats:
+    image: nats:2.10
+    container_name: nats
+    ports:
+      - "4222:4222"
+    networks:
+      - app-network
+
+
+networks:
+  app-network:
+    driver: bridge

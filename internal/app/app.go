@@ -17,6 +17,9 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
 type App struct {
@@ -76,7 +79,12 @@ func (a *App) Run(port string) error {
 	}
 
 	a.logger.Info("gRPC server starting", "port", port)
-	return a.grpcServ.Serve(lis)
+	err = a.grpcServ.Serve(lis)
+	if err != nil {
+		a.logger.Info("gRPC server stopped", "reason", err)
+		return nil
+	}
+	return nil
 }
 
 func (a *App) Close() {
