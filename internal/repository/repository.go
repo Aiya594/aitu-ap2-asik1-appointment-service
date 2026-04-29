@@ -118,9 +118,9 @@ func (r *PostgresAppointmentRepository) List() ([]*model.Appointment, error) {
 func (r *PostgresAppointmentRepository) Update(ap *model.Appointment) error {
 	query := `
 		UPDATE appointments
-		SET status = $5,
-		    updated_at = $6
-		WHERE id = $1
+		SET status = $1,
+		    updated_at = $2
+		WHERE id = $3
 	`
 
 	res, err := r.db.Exec(
