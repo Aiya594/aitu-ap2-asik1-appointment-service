@@ -31,7 +31,7 @@ type App struct {
 }
 
 func NewApp(cfg *cfg.Config) (*App, error) {
-	runMigrations()
+	runMigrations(cfg.ConnStrDB)
 
 	db, err := cfg.Connect()
 	if err != nil {
@@ -97,8 +97,7 @@ func (a *App) Stop() {
 	a.grpcServ.GracefulStop()
 }
 
-func runMigrations() {
-	dbURL := os.Getenv("DATABASE_URL")
+func runMigrations(dbURL string) {
 	if dbURL == "" {
 		log.Fatal("DATABASE_URL is not set")
 	}
