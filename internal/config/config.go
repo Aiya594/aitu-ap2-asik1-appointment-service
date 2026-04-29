@@ -16,7 +16,7 @@ type Config struct {
 }
 
 func LoadCfg() *Config {
-	return &Config{Port: os.Getenv("PORT"),
+	return &Config{Port: os.Getenv("APP_PORT"),
 		DoctorClient: os.Getenv("DOCTOR_SCV_URL"),
 		ConnStrDB:    os.Getenv("DATABASE_URL"),
 		NatsURL:      os.Getenv("NATS_URL"),
