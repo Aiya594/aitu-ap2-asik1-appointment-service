@@ -7,14 +7,17 @@ import (
 	"net"
 	"os"
 
+	"github.com/Aiya594/appointment-services/internal/cache"
 	"github.com/Aiya594/appointment-services/internal/client"
 	cfg "github.com/Aiya594/appointment-services/internal/config"
 	natspub "github.com/Aiya594/appointment-services/internal/event"
+	"github.com/Aiya594/appointment-services/internal/middleware"
 	"github.com/Aiya594/appointment-services/internal/repository"
 	grpcAppoi "github.com/Aiya594/appointment-services/internal/transport/grpc"
 	usecase "github.com/Aiya594/appointment-services/internal/use-case"
 	"github.com/Aiya594/appointment-services/proto"
 	"github.com/golang-migrate/migrate/v4"
+	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
@@ -23,11 +26,12 @@ import (
 )
 
 type App struct {
-	grpcServ *grpc.Server
-	logger   *slog.Logger
-	pub      *natspub.Publisher
-	conn     *grpc.ClientConn
-	db       *sql.DB
+	grpcServ    *grpc.Server
+	logger      *slog.Logger
+	pub         *natspub.Publisher
+	conn        *grpc.ClientConn
+	db          *sql.DB
+	redisClient *redis.Client
 }
 
 func NewApp(cfg *cfg.Config) (*App, error) {
@@ -56,11 +60,21 @@ func NewApp(cfg *cfg.Config) (*App, error) {
 	}
 
 	client := client.NewDoctorGrpcClient(conn)
+	redisClient := cache.NewRedisClient(logger)
+	var cacheRepo cache.CacheRepository
+	if redisClient != nil {
+		cacheRepo = cache.NewRedisCacheRepository(redisClient, logger)
+	} else {
+		cacheRepo = cache.NewNoop()
+	}
 
-	uc := usecase.NewAppointmentUseCase(repo, logger, client, publisher)
+	uc := usecase.NewAppointmentUseCase(repo, logger, client, publisher, cacheRepo)
 	handler := grpcAppoi.NewAppointmentServer(logger, uc)
 
-	grpcServer := grpc.NewServer()
+	rateLimiter := middleware.RateLimiterInterceptor(redisClient, logger)
+	grpcServer := grpc.NewServer(
+		grpc.UnaryInterceptor(rateLimiter),
+	)
 	proto.RegisterAppointmentServiceServer(grpcServer, handler)
 
 	return &App{
