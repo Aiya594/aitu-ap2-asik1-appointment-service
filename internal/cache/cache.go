@@ -39,7 +39,8 @@ func NewRedisCacheRepository(client *redis.Client, logger *slog.Logger) CacheRep
 	return &RedisCacheRepository{client: client, ttl: time.Duration(ttlSec) * time.Second, logger: logger}
 }
 
-func apptKey(id string) string          { return fmt.Sprintf("appointment:%s", id) }
+func apptKey(id string) string { return fmt.Sprintf("appointment:%s", id) }
+
 const apptListKey = "appointments:list"
 
 func (r *RedisCacheRepository) GetAppointment(ctx context.Context, id string) (*model.Appointment, error) {

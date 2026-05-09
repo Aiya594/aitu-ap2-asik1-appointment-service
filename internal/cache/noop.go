@@ -23,4 +23,4 @@ func (n *NoopCacheRepository) SetAppointmentList(_ context.Context, _ []*model.A
 	return nil
 }
 func (n *NoopCacheRepository) InvalidateAppointment(_ context.Context, _ string) error { return nil }
-func (n *NoopCacheRepository) InvalidateAppointmentList(_ context.Context) error        { return nil }
+func (n *NoopCacheRepository) InvalidateAppointmentList(_ context.Context) error       { return nil }

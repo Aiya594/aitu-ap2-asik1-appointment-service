@@ -34,17 +34,17 @@ type App struct {
 	redisClient *redis.Client
 }
 
-func NewApp(cfg *cfg.Config) (*App, error) {
-	runMigrations(cfg.ConnStrDB)
+func NewApp(config *cfg.Config) (*App, error) {
+	runMigrations(config.ConnStrDB)
 
-	db, err := cfg.Connect()
+	db, err := config.Connect()
 	if err != nil {
 		return nil, err
 	}
 
 	repo := repository.NewAppointmentRepo(db)
 
-	publisher, err := natspub.NewPublisher(cfg.NatsURL)
+	publisher, err := natspub.NewPublisher(config.NatsURL)
 	if err != nil {
 		return nil, err
 	}
@@ -52,14 +52,16 @@ func NewApp(cfg *cfg.Config) (*App, error) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	conn, err := grpc.Dial(
-		cfg.DoctorClient,
+		config.DoctorClient,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	client := client.NewDoctorGrpcClient(conn)
+	doctorClient := client.NewDoctorGrpcClient(conn)
+
+	// Redis — optional
 	redisClient := cache.NewRedisClient(logger)
 	var cacheRepo cache.CacheRepository
 	if redisClient != nil {
@@ -68,7 +70,7 @@ func NewApp(cfg *cfg.Config) (*App, error) {
 		cacheRepo = cache.NewNoop()
 	}
 
-	uc := usecase.NewAppointmentUseCase(repo, logger, client, publisher, cacheRepo)
+	uc := usecase.NewAppointmentUseCase(repo, logger, doctorClient, publisher, cacheRepo)
 	handler := grpcAppoi.NewAppointmentServer(logger, uc)
 
 	rateLimiter := middleware.RateLimiterInterceptor(redisClient, logger)
@@ -78,11 +80,12 @@ func NewApp(cfg *cfg.Config) (*App, error) {
 	proto.RegisterAppointmentServiceServer(grpcServer, handler)
 
 	return &App{
-		grpcServ: grpcServer,
-		logger:   logger,
-		pub:      publisher,
-		conn:     conn,
-		db:       db,
+		grpcServ:    grpcServer,
+		logger:      logger,
+		pub:         publisher,
+		conn:        conn,
+		db:          db,
+		redisClient: redisClient,
 	}, nil
 }
 
@@ -91,7 +94,6 @@ func (a *App) Run(port string) error {
 	if err != nil {
 		return err
 	}
-
 	a.logger.Info("gRPC server starting", "port", port)
 	err = a.grpcServ.Serve(lis)
 	if err != nil {
@@ -105,6 +107,9 @@ func (a *App) Close() {
 	a.pub.Close()
 	a.conn.Close()
 	a.db.Close()
+	if a.redisClient != nil {
+		a.redisClient.Close()
+	}
 }
 
 func (a *App) Stop() {
@@ -115,19 +120,13 @@ func runMigrations(dbURL string) {
 	if dbURL == "" {
 		log.Fatal("DATABASE_URL is not set")
 	}
-
-	m, err := migrate.New(
-		"file://migrations",
-		dbURL,
-	)
+	m, err := migrate.New("file://migrations", dbURL)
 	if err != nil {
 		log.Fatal("migration init error:", err)
 	}
-
 	err = m.Up()
 	if err != nil && err != migrate.ErrNoChange {
 		log.Fatal("migration failed:", err)
 	}
-
 	log.Println("migrations applied successfully")
 }
